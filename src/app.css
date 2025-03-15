@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+@font-face {
+	font-family: Inter;
+	font-style: normal;
+	font-display: swap;
+	font-feature-settings:
+		'liga' 1,
+		'calt' 1;
+	src: url('/fonts/InterVariable.woff2') format('woff2');
+}
+@supports (font-variation-settings: normal) {
+	@theme {
+		--font-sans: 'Inter';
+	}
+}
