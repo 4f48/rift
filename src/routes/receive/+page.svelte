@@ -129,13 +129,13 @@
 			<Label.Root for="code">Transmit Code</Label.Root>
 			<input
 				id="code"
-				class="mx-6 w-full rounded-full border border-gray-200 drop-shadow-xl focus:border-purple-400 focus:ring-0 focus:outline-none"
+				class="mx-6 w-full rounded-full border border-gray-200 drop-shadow-xl focus:border-blue-400 focus:ring-0 focus:outline-none"
 				autocomplete="off"
 				required
 				bind:value={code}
 			/>
 			<Button.Root
-				class="cursor-pointer rounded-full bg-purple-600 px-6 py-2 text-white drop-shadow-lg duration-300 hover:bg-purple-800"
+				class="cursor-pointer rounded-full bg-blue-600 px-6 py-2 text-white drop-shadow-lg duration-300 hover:bg-blue-800"
 				type="submit">Receive</Button.Root
 			>
 			{#if !error}
@@ -147,7 +147,7 @@
 		<Progress.Root value={progress} class="relative h-6 w-full overflow-hidden bg-gray-200">
 			{#if !error}
 				<div
-					class="h-full w-full flex-1 bg-purple-500 transition-all duration-500 ease-in-out"
+					class="h-full w-full flex-1 bg-blue-500 transition-all duration-500 ease-in-out"
 					style={`transform: translateX(-${100 - (100 * (progress ?? 0)) / 100}%)`}
 				></div>
 			{:else}

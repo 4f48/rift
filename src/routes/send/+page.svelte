@@ -174,7 +174,7 @@
 			<Label.Root
 				for="files"
 				role="button"
-				class="cursor-pointer rounded-full bg-purple-600 px-6 py-2 text-white drop-shadow-lg duration-300 hover:bg-purple-800"
+				class="cursor-pointer rounded-full bg-blue-600 px-6 py-2 text-white drop-shadow-lg duration-300 hover:bg-blue-800"
 				>Select Files</Label.Root
 			>
 			<input
