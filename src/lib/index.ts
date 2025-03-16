@@ -1,1 +1,4 @@
-// place files you want to import through the `$lib` alias in this folder.
+export function truncateString(string: string, maxLength: number): string {
+	if (string.length > maxLength) return string.substring(0, maxLength - 3) + '...';
+	return string;
+}

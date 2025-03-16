@@ -4,61 +4,7 @@
 	import { Peer } from 'peerjs';
 	import type { DataConnection } from 'peerjs';
 	import CryptoJS from 'crypto-js';
-
-	// EFF short wordlist (partial - in a real implementation you'd include the full list)
-	const effWordlist = [
-		'abacus',
-		'abdomen',
-		'abdominal',
-		'abide',
-		'abiding',
-		'ability',
-		'ablaze',
-		'able',
-		'abnormal',
-		'abrasion',
-		'abrasive',
-		'abreast',
-		'abridge',
-		'abroad',
-		'abruptly',
-		'absence',
-		'absentee',
-		'absently',
-		'absinthe',
-		'absolute',
-		'absolve',
-		'abstain',
-		'abstract',
-		'absurd',
-		'accent',
-		'acclaim',
-		'acclimate',
-		'accompany',
-		'account',
-		'accuracy',
-		'accurate',
-		'accustom',
-		'acetone',
-		'achiness',
-		'aching',
-		'acid',
-		'acorn',
-		'acquaint',
-		'acquire',
-		'acre',
-		'acrobat',
-		'acronym',
-		'acting',
-		'action',
-		'activate',
-		'activator',
-		'active',
-		'activism',
-		'activist',
-		'activity'
-		// ... more words would be included in a real implementation
-	];
+	import { generateTransmitCode, getWordList } from '$lib/code';
 
 	let open = $state(false);
 	let passphrase = $state<string>('');
@@ -84,24 +30,6 @@
 		type: 'done';
 	};
 
-	function generatePassphrase(wordCount: number = 6): string {
-		// Generate a secure passphrase with the specified number of words
-		const selectedWords: string[] = [];
-		const availableWords = [...effWordlist];
-
-		// Select random words without replacement
-		for (let i = 0; i < wordCount && availableWords.length > 0; i++) {
-			const randomIndex = Math.floor(
-				CryptoJS.lib.WordArray.random(4).words[0] % availableWords.length
-			);
-			selectedWords.push(availableWords[randomIndex]);
-			availableWords.splice(randomIndex, 1);
-		}
-
-		// Join with hyphens as per EFF's example format
-		return selectedWords.join('-');
-	}
-
 	function deriveEncryptionKey(passphrase: string): string {
 		// Use PBKDF2 to derive a strong key from the passphrase
 		return CryptoJS.PBKDF2(passphrase, 'wormhole-salt', {
@@ -120,7 +48,8 @@
 		status = 'Preparing file...';
 
 		// Generate a secure passphrase
-		passphrase = generatePassphrase(4); // 4 words is a good balance of security and usability
+		const wordList = await getWordList();
+		passphrase = await generateTransmitCode(4, wordList);
 		const encryptionKey = deriveEncryptionKey(passphrase);
 
 		// Extract a numeric identifier from the passphrase for connection
