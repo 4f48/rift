@@ -16,7 +16,9 @@
 	let dialogOpen = $state(false);
 	let progress = $state(0);
 	let fileInput = $state<HTMLInputElement>();
-	let peer: Peer;
+	let peer: Peer | undefined;
+	let transferActive = $state(false);
+	let transferCancelled = $state(false);
 
 	let stage = $state<string>();
 	let stageDescription = $state<string>();
@@ -28,6 +30,7 @@
 	async function changeHandler(event: Event) {
 		event.preventDefault();
 		error = undefined;
+		transferCancelled = false;
 		if (!fileInput) throw Error('fileInput is undefined');
 		if (!fileInput.files) throw Error('no files uploaded');
 
@@ -54,7 +57,10 @@
 		setTimeout(() => (progress = 80), 100);
 		peer = new Peer(hash, {
 			config: {
-				iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }]
+				iceServers: [
+					{ urls: 'stun:stun.cloudflare.com:3478' },
+					{ urls: 'stun:stun.l.google.com:19302' }
+				]
 			}
 		});
 
@@ -74,19 +80,32 @@
 			setTimeout(() => (progress = 10), 100);
 
 			connection.on('data', (data: unknown) => {
-				if (data == 'ready') {
+				if (data === 'ready') {
 					status = 'Ready for transfer...';
 					setTimeout(() => (progress = 20), 100);
 
 					if (!code) throw Error('failed to get code');
 					transferFile(file, key, connection);
+				} else if (typeof data === 'object' && data !== null) {
+					// Handle flow control acknowledgments
+					if ('type' in data && (data as { type: string }).type === 'ack') {
+						// Received acknowledgment from receiver
+						const ackData = data as { type: string; received: number };
+						console.debug(ackData);
+					} else if ('type' in data && (data as { type: string }).type === 'meta_ack') {
+						// Metadata acknowledged, can start sending chunks
+						if (transferActive) return; // Already started
+						transferActive = true;
+					}
 				}
 			});
+
 			connection.on('error', (err) => {
 				error = err.message;
 				throw Error(error);
 			});
 		});
+
 		peer.on('error', (err) => {
 			error = err.message;
 			throw Error(error);
@@ -106,50 +125,100 @@
 			};
 			connection.send(metadata);
 
-			const arrBuf = await file.arrayBuffer();
-			const chunkSize = 16 * 1024;
-
+			// Rather than loading the entire file at once, we'll use a FileReader to read chunks
+			const chunkSize = 256 * 1024; // 256KB chunks for better performance
+			const maxPendingChunks = 10; // Maximum number of chunks to process at once
+			let pendingChunks = 0;
 			let offset = 0;
-			stage = 'Transfering...';
-			const nextChunk = () => {
-				if (offset >= arrBuf.byteLength) {
-					const finishSignal: Message.Finish = {
-						type: 'finish',
-						fileHash: blake3(new Uint8Array(arrBuf)).toBase64()
-					};
-					connection.send(finishSignal);
+			let bytesProcessed = 0;
+			let activeTransfer = true;
 
-					status = 'Done!';
+			stage = 'Transferring...';
 
-					connection.close();
-					peer.destroy();
+			// Function to read and encrypt a chunk
+			const processNextChunk = async (): Promise<boolean> => {
+				if (!activeTransfer || transferCancelled) return false;
+				if (offset >= file.size) return false; // No more chunks to process
 
-					setTimeout(() => (dialogOpen = false), 300);
-					return;
-				}
+				const end = Math.min(offset + chunkSize, file.size);
+				const chunk = await file.slice(offset, end).arrayBuffer();
 
-				const end = Math.min(offset + chunkSize, arrBuf.byteLength);
-				const chunk = arrBuf.slice(offset, end);
-
+				// Encrypt the chunk
 				const nonce = randomBytes(24);
 				const chacha = xchacha20poly1305(key, nonce);
 				const encryptedChunk = chacha.encrypt(new Uint8Array(chunk));
+
 				const msg: Message.Chunk = {
 					type: 'chunk',
 					data: bytesToHex(encryptedChunk),
 					nonce: bytesToHex(nonce)
 				};
+
+				// Send the chunk
 				connection.send(msg);
 
+				// Update progress
 				offset = end;
-				progress = Math.min(100, Math.round((offset / arrBuf.byteLength) * 100));
-				status = `Transfering: ${progress}%`;
+				bytesProcessed = offset;
+				progress = Math.min(100, Math.round((bytesProcessed / file.size) * 100));
+				status = `Transferring: ${progress}%`;
 
-				setTimeout(nextChunk, 0);
+				return true;
 			};
 
-			nextChunk();
+			// Set up a processing queue with controlled concurrency
+			const processQueue = async () => {
+				while (
+					activeTransfer &&
+					!transferCancelled &&
+					offset < file.size &&
+					pendingChunks < maxPendingChunks
+				) {
+					pendingChunks++;
+					const hasMoreChunks = await processNextChunk();
+					pendingChunks--;
+
+					if (!hasMoreChunks) break;
+
+					// Small delay to keep UI responsive and check for new acknowledgments
+					await new Promise((resolve) => setTimeout(resolve, 5));
+				}
+
+				// If we've processed all chunks and there's nothing pending, send finish signal
+				if (offset >= file.size && pendingChunks === 0 && activeTransfer && !transferCancelled) {
+					const finishSignal: Message.Finish = {
+						type: 'finish',
+						fileHash: bytesToHex(blake3(new Uint8Array(await file.arrayBuffer())))
+					};
+					connection.send(finishSignal);
+
+					status = 'Done!';
+					/*
+					setTimeout(() => {
+						connection.close();
+						if (peer) peer.destroy();
+						transferActive = false;
+						setTimeout(() => (dialogOpen = false), 300);
+					}, 500);
+					*/
+				} else if (activeTransfer && !transferCancelled) {
+					// Schedule next batch after a short delay
+					setTimeout(processQueue, 50);
+				}
+			};
+
+			// Start processing
+			processQueue();
+
+			// Set up cleanup on disconnect
+			connection.on('close', () => {
+				activeTransfer = false;
+				if (!transferCancelled) {
+					error = 'Connection closed unexpectedly';
+				}
+			});
 		} catch (err) {
+			transferActive = false;
 			if (err instanceof Error) {
 				error = err.message;
 				console.error(err);
@@ -164,7 +233,17 @@
 	}
 
 	function cancel() {
-		peer.destroy();
+		transferCancelled = true;
+		transferActive = false;
+		if (peer) {
+			peer.destroy();
+			peer = undefined;
+		}
+		setTimeout(() => {
+			dialogOpen = false;
+			status = undefined;
+			progress = 0;
+		}, 100);
 	}
 </script>
 
