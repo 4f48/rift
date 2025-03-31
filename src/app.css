@@ -1,3 +1,5 @@
+@import url(https://fonts.bunny.net/css?family=domine:500|frank-ruhl-libre:400|jetbrains-mono:400);
+
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
@@ -11,8 +13,32 @@
 		'calt' 1;
 	src: url('/fonts/InterVariable.woff2') format('woff2');
 }
+
+:root {
+	--text: 188 22% 7%;
+	--background: 189 37% 96%;
+	--primary: 188 43% 50%;
+	--secondary: 189 53% 73%;
+	--accent: 189 61% 62%;
+}
+[data-theme='dark'] {
+	--text: 187 22% 93%;
+	--background: 188 40% 4%;
+	--primary: 188 43% 50%;
+	--secondary: 189 53% 27%;
+	--accent: 189 61% 38%;
+}
+
 @supports (font-variation-settings: normal) {
-	@theme {
-		--font-sans: 'Inter';
+	@theme inline {
+		--font-sans: 'Inter', sans;
+		--font-serif: 'Domine', serif;
+		--font-mono: 'JetBrains Mono', mono;
+
+		--color-text: hsl(var(--text));
+		--color-background: hsl(var(--background));
+		--color-primary: hsl(var(--primary));
+		--color-secondary: hsl(var(--secondary));
+		--color-accent: hsl(var(--accent));
 	}
 }

@@ -1,4 +1,8 @@
-export function truncateString(string: string, maxLength: number): string {
-	if (string.length > maxLength) return string.substring(0, maxLength - 3) + '...';
-	return string;
+export function handleError(
+	cancelFunction: (websocket: WebSocket) => void,
+	event: Event,
+	websocket: WebSocket
+): void {
+	console.error(event);
+	cancelFunction(websocket);
 }
