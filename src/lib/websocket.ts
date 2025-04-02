@@ -1,4 +1,4 @@
-import { passphrase } from '$lib/stores';
+import { passphrase, readyDialogOpen, status, progress } from '$lib/stores';
 import type { AnswerMsg, ConnReqMsg, IceCandidateMsg, SignalingMessage } from '$lib/types';
 import { handleNewIceCandidate } from './rtc';
 
@@ -39,13 +39,17 @@ export class Sender {
 		switch (msg.type) {
 			case 'passphrase':
 				passphrase.set(msg.passphrase);
-				console.debug(msg.passphrase);
+				readyDialogOpen.set(true);
+				this.updateProgressStatus(30, 'Waiting for receiver to signal');
 
 				peerConnection.onicecandidate = (event: RTCPeerConnectionIceEvent) =>
 					handleNewIceCandidate(event, msg.passphrase, websocket);
+
 				break;
 			case 'answer':
 				{
+					this.updateProgressStatus(40, 'Receiver found! Negotiating connection');
+
 					const sessionDescription: RTCSessionDescription = new RTCSessionDescription({
 						type: 'answer',
 						sdp: msg.sdp
@@ -59,6 +63,26 @@ export class Sender {
 			default:
 				throw Error('unhandled SignalingMessage type');
 		}
+	}
+
+	/**
+	 * Updates the sending process' progress and status.
+	 * @param newProgress The new progress percentage (0-100).
+	 * @param newStatus The new status message.
+	 */
+	static updateProgressStatus(newProgress: number, newStatus: string): void {
+		progress.update((currentProgress) => {
+			return {
+				...currentProgress,
+				sender: newProgress
+			};
+		});
+		status.update((currentStatus) => {
+			return {
+				...currentStatus,
+				sender: newStatus
+			};
+		});
 	}
 }
 

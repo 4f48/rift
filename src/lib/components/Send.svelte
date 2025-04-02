@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, Label, Progress, ScrollArea } from 'bits-ui';
+	import { Button, Dialog, Label, Progress, ScrollArea } from 'bits-ui';
 	import Upload from 'phosphor-svelte/lib/Upload';
 	import FileArrowUp from 'phosphor-svelte/lib/FileArrowUp';
 	import X from 'phosphor-svelte/lib/X';
@@ -7,12 +7,12 @@
 	import { Sender as RTCsender } from '$lib/rtc';
 	import { handleWebSocketDisconnection, Sender as WSsender } from '$lib/websocket';
 	import { handleError } from '$lib';
+	import { progress, status, readyDialogOpen, passphrase } from '$lib/stores';
 
 	let websocket: WebSocket;
 
 	let files = $state<File[]>([]);
-	let status = $state<string>();
-	let progress = $state<number>(0);
+	let fileName: string | undefined = $state<string>();
 
 	let input = $state<HTMLInputElement>();
 	function addFiles(event: Event, input: HTMLInputElement) {
@@ -35,21 +35,21 @@
 		} catch (e) {
 			if (e instanceof Error) console.error(e);
 		}
-		status = undefined;
-		progress = 0;
+		$status.sender = undefined;
+		$progress.sender = 0;
 	}
 
 	async function transfer(event: SubmitEvent, files: File[]) {
-		status = 'Preparing';
+		$status.sender = 'Preparing';
 		event.preventDefault();
-		progress = 0;
+		$progress.sender = 0;
 
-		status = files.length > 1 ? 'Compressing files' : status;
+		$status.sender = files.length > 1 ? 'Compressing files' : $status.sender;
 		const file: File = files.length > 1 ? await compressFiles(files) : files[0];
-		progress = 10;
+		fileName = file.name;
+		$progress.sender = 10;
 
-		console.debug(file.name);
-
+		$status.sender = 'Initializing connection';
 		const peerConnection = new RTCPeerConnection({
 			iceServers: [
 				{ urls: 'stun:stun.cloudflare.com:3478' },
@@ -68,6 +68,7 @@
 		websocket.onclose = (event: CloseEvent) =>
 			handleWebSocketDisconnection(cancel, event, websocket);
 		websocket.onerror = (event: Event) => handleError(cancel, event, websocket);
+		$progress.sender = 20;
 	}
 </script>
 
@@ -93,7 +94,7 @@
 		type="file"
 		class="hidden"
 		multiple
-		disabled={status != undefined}
+		disabled={$status.sender != undefined}
 		onchange={(e: Event) => addFiles(e, input!)}
 		bind:this={input}
 	/>
@@ -105,7 +106,7 @@
 						<li class="bg-accent py-1/2 flex items-center rounded-full pr-3 text-nowrap">
 							<Button.Root
 								class="disabled:text-secondary cursor-pointer px-1 duration-150 hover:text-red-300 disabled:cursor-not-allowed"
-								disabled={status != undefined}
+								disabled={$status.sender != undefined}
 								onclick={() => {
 									files = removeFile(i, files);
 								}}><X /></Button.Root
@@ -125,7 +126,7 @@
 	{:else}
 		<p class="text-text my-3">No files added yet</p>
 	{/if}
-	{#if !status}
+	{#if !$status.sender}
 		<Button.Root
 			type="submit"
 			class="bg-primary text-background disabled:bg-primary/50 hover:bg-accent mb-4 w-full cursor-pointer rounded-sm py-2 duration-150 disabled:cursor-not-allowed"
@@ -140,22 +141,49 @@
 		>
 	{/if}
 </form>
-{#if status}
+{#if $status.sender}
 	<div class="px-6">
 		<div class="text-text flex">
-			<p id="status" class="flex-1">{status}...</p>
-			<p>{progress}%</p>
+			<p id="status" class="flex-1">{$status.sender}...</p>
+			<p>{$progress.sender}%</p>
 		</div>
 		<Progress.Root
-			value={progress}
+			value={$progress.sender}
 			max={100}
 			aria-labelledby="status"
 			class="relative h-2 w-full overflow-hidden rounded-full bg-gray-200"
 		>
 			<div
 				class="bg-secondary h-full w-full flex-1 rounded-full transition-all duration-75 ease-in-out"
-				style={`transform: translateX(-${100 - (100 * (progress ?? 0)) / 100}%)`}
+				style={`transform: translateX(-${100 - (100 * ($progress.sender ?? 0)) / 100}%)`}
 			></div>
 		</Progress.Root>
 	</div>
 {/if}
+
+<Dialog.Root bind:open={$readyDialogOpen}>
+	<Dialog.Portal>
+		<Dialog.Overlay
+			class="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-200 bg-black/80"
+		/>
+		<Dialog.Content
+			interactOutsideBehavior="ignore"
+			escapeKeydownBehavior="ignore"
+			class="rounded-card-lg bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-200 flex w-[calc(100vw-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col rounded-2xl p-5 md:w-[50vw]"
+		>
+			<Dialog.Title class="text-3xl font-bold">Your Passhprase</Dialog.Title>
+			<Dialog.Description class="truncate">Ready to send "{fileName}".</Dialog.Description>
+			<span
+				class="border-primary focus:border-secondary mt-5 overflow-auto rounded-sm border p-2 font-mono text-nowrap select-all placeholder:text-gray-400 focus:ring-0 disabled:bg-gray-300 disabled:text-gray-600"
+				>{$passphrase}</span
+			>
+			<Dialog.Close onclick={() => cancel(websocket)}>
+				<Button.Root
+					type="button"
+					class="border-primary text-text hover:bg-secondary/30 mt-2 mb-4 w-full cursor-pointer rounded-sm border py-2 duration-150 disabled:cursor-not-allowed"
+					>Cancel</Button.Root
+				>
+			</Dialog.Close>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>
