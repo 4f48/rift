@@ -10,7 +10,12 @@ const config: Config = {
 		metadata: 4 * 4 + 8,
 	},
 	passphraseLength: 6,
-	stunServers: [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.cloudflare.com:53' }],
+	stunServers: [
+		{ urls: 'stun:stun.cloudflare.com:3478' },
+		{
+			urls: 'stun:stun.cloudflare.com:53',
+		},
+	],
 };
 
 export default config;

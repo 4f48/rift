@@ -1,5 +1,5 @@
 import type { Status } from '$lib/types';
-import { clsx, type ClassValue } from 'clsx';
+import { type ClassValue, clsx } from 'clsx';
 import type { Writable } from 'svelte/store';
 import { twMerge } from 'tailwind-merge';
 

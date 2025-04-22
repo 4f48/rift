@@ -24,7 +24,7 @@ export function transferFile(
 	file: File,
 	status: Writable<Status | undefined>
 ): void {
-	dataChannel.onopen = async () => {
+	dataChannel.onopen = () => {
 		const totalChunks: number = Math.ceil(file.size / config.chunkSize);
 		sendMetadata(totalChunks, config, dataChannel, file);
 

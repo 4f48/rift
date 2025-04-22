@@ -24,7 +24,7 @@ export function receiveFile(
 
 		let metadata: Metadata | undefined = undefined;
 		let receivedChunks: number = 0;
-		dataChannel.onmessage = async (event: MessageEvent) => {
+		dataChannel.onmessage = (event: MessageEvent) => {
 			const buffer: ArrayBuffer = event.data;
 			const view: DataView = new DataView(buffer);
 			const messageType: number = view.getUint32(REGISTER_TYPE);
