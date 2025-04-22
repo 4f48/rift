@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { getWordList, generateTransmitCode } from '$lib/code';
+	import Button from '$lib/components/Button.svelte';
 	import { onMount } from 'svelte';
+	import Share from 'phosphor-svelte/lib/Share';
+	import Link from '$lib/components/Link.svelte';
 
 	let code = $state<string>();
 	let length = $state<number>(4);
@@ -38,7 +41,7 @@
 					min="1"
 					class={{
 						'w-[50]': !error,
-						'w-[50] border-red-500': error
+						'w-[50] border-red-500': error,
 					}}
 				/>
 			</div>
@@ -46,7 +49,7 @@
 			<p
 				class={{
 					hidden: !error,
-					'text-red-500': error
+					'text-red-500': error,
 				}}
 			>
 				{error}
@@ -54,3 +57,6 @@
 		</section>
 	</main>
 </div>
+
+<Button><Share />Get started</Button>
+<Link href="/" variant="button_outlined">h</Link>

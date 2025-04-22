@@ -4,6 +4,7 @@
 	import AppleLogo from 'phosphor-svelte/lib/AppleLogo';
 	import Heart from 'phosphor-svelte/lib/Heart';
 	import HandCoins from 'phosphor-svelte/lib/HandCoins';
+	import Link from '$lib/components/Link.svelte';
 
 	const coming_soon = true;
 </script>
@@ -76,12 +77,8 @@
 		</div>
 	{:else}
 		<div class="flex h-full w-full flex-col items-center justify-center gap-2">
-			<h1 class="text-primary text-xl font-bold">Android & iOS apps coming soon</h1>
-			<a
-				href="/"
-				class="text-text hover:bg-secondary/30 hover:text-primary w-26 rounded-full text-center duration-150"
-				>Go back</a
-			>
+			<h1 class="text-xl font-bold">Android & iOS apps coming soon.</h1>
+			<Link href="/" variant="pill">Go back</Link>
 		</div>
 	{/if}
 </div>
