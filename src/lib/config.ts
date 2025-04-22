@@ -4,7 +4,7 @@ const config: Config = {
 	bufferTreshold: 64 * 1024,
 	channelLabel: 'rift',
 	chunkSize: 16 * 1024,
-	flareAddress: 'ws://0.0.0.0:8080',
+	flareAddress: 'wss://flare.4f48.dev',
 	headerSize: {
 		chunk: 3 * 4,
 		metadata: 4 * 4 + 8,
