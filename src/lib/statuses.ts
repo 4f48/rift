@@ -3,15 +3,15 @@ import type { Statuses } from './types';
 const statuses: Statuses = {
 	initializing: {
 		message: 'Initializing...',
-		progress: 10,
+		progress: 0,
 	},
 	negotiating: {
 		message: 'Negotiating connection...',
-		progress: 20,
+		progress: 0,
 	},
 	files: {
 		message: 'Processing files...',
-		progress: 30,
+		progress: 0,
 	},
 };
 

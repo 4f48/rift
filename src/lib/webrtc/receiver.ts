@@ -1,5 +1,5 @@
 import { saveFile } from '$lib/files';
-import type { Config, Metadata, Status } from '$lib/types';
+import type { Config, Metadata, ParsedChunk, Status } from '$lib/types';
 import type { Writable } from 'svelte/store';
 import {
 	DATA_CHUNK,
@@ -17,13 +17,21 @@ export function receiveFile(
 	peerConnection: RTCPeerConnection,
 	status: Writable<Status | undefined>
 ): void {
-	let chunks: ArrayBuffer[] = [];
 	peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
 		const dataChannel: RTCDataChannel = event.channel;
 		dataChannel.binaryType = 'arraybuffer';
 
 		let metadata: Metadata | undefined = undefined;
 		let receivedChunks: number = 0;
+		let fileStream: ReadableStream | undefined = undefined;
+		let streamController: ReadableStreamController<Uint8Array> | null = null;
+
+		fileStream = new ReadableStream({
+			start(controller) {
+				streamController = controller;
+			},
+		});
+
 		dataChannel.onmessage = (event: MessageEvent) => {
 			const buffer: ArrayBuffer = event.data;
 			const view: DataView = new DataView(buffer);
@@ -31,21 +39,24 @@ export function receiveFile(
 
 			switch (messageType) {
 				case DATA_METADATA:
-					{
-						metadata = parseMetadata(buffer, config, view);
-						chunks = new Array(metadata.totalChunks);
-					}
+					metadata = parseMetadata(buffer, config, view);
 					break;
 				case DATA_CHUNK:
-					if (!metadata) throw Error('must receive metadata before chunks');
-					parseChunk(buffer, chunks, config, view);
-					receivedChunks++;
-					status.set({
-						message: 'Receiving...',
-						progress: Math.min(Math.floor((receivedChunks / metadata.totalChunks) * 100), 99),
-					});
-					if (receivedChunks == metadata.totalChunks) {
-						assembleFile(chunks, metadata, status);
+					{
+						if (!metadata || !streamController) throw Error('must receive metadata before chunks');
+
+						const chunk = parseChunk(buffer, config, view);
+						streamController.enqueue(new Uint8Array(chunk.data));
+						receivedChunks++;
+
+						status.set({
+							message: 'Receiving...',
+							progress: Math.min(Math.floor((receivedChunks / metadata.totalChunks) * 100), 99),
+						});
+						if (receivedChunks == metadata.totalChunks) {
+							streamController.close();
+							assembleFile(fileStream, metadata, status);
+						}
 					}
 					break;
 				default:
@@ -97,36 +108,34 @@ function parseMetadata(buffer: ArrayBuffer, config: Config, view: DataView): Met
  * @param config application config
  * @param view data view for the message buffer
  */
-function parseChunk(
-	buffer: ArrayBuffer,
-	chunks: ArrayBuffer[],
-	config: Config,
-	view: DataView
-): void {
+function parseChunk(buffer: ArrayBuffer, config: Config, view: DataView): ParsedChunk {
 	const chunkSize: number = view.getUint32(REGISTER_SIZE);
 	const index: number = view.getUint32(REGISTER_INDEX);
-
 	const data: ArrayBuffer = buffer.slice(
 		config.headerSize.chunk,
 		config.headerSize.chunk + chunkSize
 	);
-	chunks[index] = data;
+
+	return {
+		data,
+		index,
+		size: chunkSize,
+	};
 }
 
 /**
  * Assembles the file from chunks and saves it to the user's computer.
- * @param chunks array of chunks to assemble
+ * @param fileStream readable stream containing chunks
  * @param metadata metadata for the file to be saved
  * @param status application status
  */
-function assembleFile(
-	chunks: ArrayBuffer[],
+async function assembleFile(
+	fileStream: ReadableStream<Uint8Array>,
 	metadata: Metadata,
 	status: Writable<Status | undefined>
-): void {
-	const blob = new Blob(chunks, {
-		type: metadata.fileType,
-	});
+): Promise<void> {
+	const response = new Response(fileStream);
+	const blob = await response.blob();
 	saveFile(blob, metadata.fileName);
 
 	status.set({

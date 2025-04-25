@@ -25,6 +25,12 @@ export interface Metadata {
 	totalChunks: number;
 }
 
+export interface ParsedChunk {
+	data: ArrayBuffer;
+	index: number;
+	size: number;
+}
+
 export interface Status {
 	message: string;
 	progress: number;
