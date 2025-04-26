@@ -38,7 +38,11 @@ export interface Status {
 
 export interface Statuses {
 	initializing: Status;
-	negotiating: Status;
+	websocket_connecting: Status;
+	signaling: Status;
+	waiting_for_receiver: Status;
+	webrtc_connecting: Status;
+	requesting: Status;
 	files: Status;
 }
 

@@ -1,4 +1,5 @@
 import type { Config, Status } from '$lib/types';
+import { toast } from 'svelte-sonner';
 import type { Writable } from 'svelte/store';
 import {
 	DATA_CHUNK,
@@ -22,7 +23,8 @@ export function transferFile(
 	config: Config,
 	dataChannel: RTCDataChannel,
 	file: File,
-	status: Writable<Status | undefined>
+	status: Writable<Status | undefined>,
+	webSocket: WebSocket
 ): void {
 	dataChannel.onopen = () => {
 		const totalChunks: number = Math.ceil(file.size / config.chunkSize);
@@ -37,6 +39,11 @@ export function transferFile(
 					progress: 100,
 				});
 				setTimeout(() => status.set(undefined), 1000);
+				toast.success('Transfer complete.', {
+					description: `Successfully sent ${file.name}.`,
+				});
+				webSocket.close();
+				dataChannel.close();
 				return;
 			}
 

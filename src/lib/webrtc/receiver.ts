@@ -46,7 +46,8 @@ interface WindowWithFilePicker extends Window {
 export function receiveFile(
 	config: Config,
 	peerConnection: RTCPeerConnection,
-	status: Writable<Status | undefined>
+	status: Writable<Status | undefined>,
+	webSocket: WebSocket
 ): void {
 	peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
 		const dataChannel: RTCDataChannel = event.channel;
@@ -99,16 +100,19 @@ export function receiveFile(
 					type: metadata?.fileType || 'application/octet-stream',
 				});
 				saveFile(blob, metadata?.fileName || 'download');
+				webSocket.close();
+				dataChannel.close();
+				peerConnection.close();
 
 				status.set({
 					message: 'Transfer complete!',
 					progress: 100,
 				});
+
+				setTimeout(() => status.set(undefined), 1000);
 			}
-			setTimeout(() => status.set(undefined), 1000);
 		};
 
-		// Try to use File System Access API if available
 		const setupFileWriter = async (): Promise<boolean> => {
 			const windowWithFilePicker = window as unknown as WindowWithFilePicker;
 			if ('showSaveFilePicker' in window) {

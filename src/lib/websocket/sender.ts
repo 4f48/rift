@@ -1,4 +1,5 @@
-import type { Config, SignalingMessage } from '$lib/types';
+import statuses from '$lib/statuses';
+import type { Config, SignalingMessage, Status } from '$lib/types';
 import type { Writable } from 'svelte/store';
 import { handleIceCandidate, handleNewIceCandidate } from './common';
 
@@ -15,12 +16,21 @@ export function negotiateConnection(
 	passphrase: Writable<string>,
 	passphraseDialogOpen: Writable<boolean>,
 	peerConnection: RTCPeerConnection,
+	status: Writable<Status | undefined>,
 	webSocket: WebSocket | undefined
 ): void {
+	status.set(statuses.websocket_connecting);
 	webSocket = new WebSocket(config.flareAddress);
-	webSocket.onopen = () => sendOffer(config, peerConnection, webSocket);
+	webSocket.onopen = () => sendOffer(config, peerConnection, status, webSocket);
 	webSocket.onmessage = (messageEvent: MessageEvent) =>
-		handleResponses(messageEvent, passphrase, passphraseDialogOpen, peerConnection, webSocket);
+		handleResponses(
+			messageEvent,
+			passphrase,
+			passphraseDialogOpen,
+			peerConnection,
+			status,
+			webSocket
+		);
 	webSocket.onclose = () => {};
 	webSocket.onerror = () => {};
 }
@@ -34,8 +44,11 @@ export function negotiateConnection(
 async function sendOffer(
 	config: Config,
 	peerConnection: RTCPeerConnection,
+	status: Writable<Status | undefined>,
 	webSocket: WebSocket
 ): Promise<void> {
+	status.set(statuses.signaling);
+
 	const offer: RTCSessionDescriptionInit = await peerConnection.createOffer();
 	peerConnection.setLocalDescription(offer);
 
@@ -62,18 +75,19 @@ function handleResponses(
 	passphrase: Writable<string>,
 	passphraseDialogOpen: Writable<boolean>,
 	peerConnection: RTCPeerConnection,
+	status: Writable<Status | undefined>,
 	webSocket: WebSocket
 ): void {
 	const message: SignalingMessage = JSON.parse(messageEvent.data);
 	switch (message.type) {
 		case 'passphrase':
 			passphrase.set(message.passphrase);
-			peerConnection.onicecandidate = (event: RTCPeerConnectionIceEvent) =>
-				handleNewIceCandidate(event, webSocket);
 			passphraseDialogOpen.set(true);
+			status.set(statuses.waiting_for_receiver);
 			break;
 		case 'answer':
-			handleAnswer(peerConnection, message.sdp);
+			handleAnswer(peerConnection, message.sdp, webSocket);
+			status.set(statuses.webrtc_connecting);
 			passphraseDialogOpen.set(false);
 			break;
 		case 'ice-candidate':
@@ -86,10 +100,12 @@ function handleResponses(
  * @param sdp session description protocol message of the receiver
  * @param peerConnection webrtc connection to configure
  */
-function handleAnswer(peerConnection: RTCPeerConnection, sdp: string): void {
+function handleAnswer(peerConnection: RTCPeerConnection, sdp: string, webSocket: WebSocket): void {
 	const description: RTCSessionDescription = new RTCSessionDescription({
 		type: 'answer',
 		sdp,
 	});
 	peerConnection.setRemoteDescription(description);
+	peerConnection.onicecandidate = (event: RTCPeerConnectionIceEvent) =>
+		handleNewIceCandidate(event, webSocket);
 }

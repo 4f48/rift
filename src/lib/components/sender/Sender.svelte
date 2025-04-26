@@ -35,13 +35,18 @@
 		const dataChannel: RTCDataChannel = peerConnection.createDataChannel(config.channelLabel);
 		dataChannel.binaryType = 'arraybuffer';
 
-		$status = statuses.negotiating;
-		negotiateConnection(config, passphrase, passphraseDialogOpen, peerConnection!, webSocket);
+		negotiateConnection(
+			config,
+			passphrase,
+			passphraseDialogOpen,
+			peerConnection!,
+			status,
+			webSocket
+		);
 
-		$status = statuses.files;
 		const file = await processFiles(files);
 
-		transferFile(config, dataChannel, file, status);
+		transferFile(config, dataChannel, file, status, webSocket!);
 	}
 </script>
 

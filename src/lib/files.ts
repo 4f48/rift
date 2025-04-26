@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { toast } from 'svelte-sonner';
 
 /**
  * Appends some new files to a list of files.
@@ -100,4 +101,7 @@ export function saveFile(blob: Blob, fileName: string): void {
 	a.click();
 	URL.revokeObjectURL(url);
 	document.body.removeChild(a);
+	toast.success('Transfer complete.', {
+		description: `Successfully saved ${fileName}.`,
+	});
 }

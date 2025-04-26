@@ -28,9 +28,9 @@
 			iceServers: config.stunServers,
 		});
 
-		negotiateConnection(config, passphrase, peerConnection, webSocket);
+		negotiateConnection(config, passphrase, peerConnection, status, webSocket);
 
-		receiveFile(config, peerConnection, status);
+		receiveFile(config, peerConnection, status, webSocket!);
 	}
 </script>
 

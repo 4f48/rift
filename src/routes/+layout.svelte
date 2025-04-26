@@ -24,4 +24,4 @@
 	{@render children()}
 </main>
 
-<Toaster />
+<Toaster position="bottom-center" richColors />

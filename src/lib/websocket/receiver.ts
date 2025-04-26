@@ -1,4 +1,6 @@
-import type { Config, SignalingMessage } from '$lib/types';
+import statuses from '$lib/statuses';
+import type { Config, SignalingMessage, Status } from '$lib/types';
+import type { Writable } from 'svelte/store';
 import { handleIceCandidate, handleNewIceCandidate } from './common';
 
 /**
@@ -12,12 +14,14 @@ export function negotiateConnection(
 	config: Config,
 	passphrase: string,
 	peerConnection: RTCPeerConnection,
+	status: Writable<Status | undefined>,
 	webSocket: WebSocket | undefined
 ): void {
+	status.set(statuses.websocket_connecting);
 	webSocket = new WebSocket(config.flareAddress);
-	webSocket.onopen = () => requestConnection(passphrase, webSocket);
+	webSocket.onopen = () => requestConnection(passphrase, status, webSocket);
 	webSocket.onmessage = (messageEvent: MessageEvent) =>
-		handleResponses(messageEvent, peerConnection, webSocket);
+		handleResponses(messageEvent, peerConnection, status, webSocket);
 	webSocket.onclose = () => {};
 	webSocket.onerror = () => {};
 }
@@ -27,12 +31,17 @@ export function negotiateConnection(
  * @param passphrase passphrase used to identify the sender
  * @param webSocket websocket connection to send the request over
  */
-function requestConnection(passphrase: string, webSocket: WebSocket): void {
+function requestConnection(
+	passphrase: string,
+	status: Writable<Status | undefined>,
+	webSocket: WebSocket
+): void {
 	const message: SignalingMessage = {
 		type: 'connection-request',
 		passphrase,
 	};
 	webSocket.send(JSON.stringify(message));
+	status.set(statuses.requesting);
 }
 
 /**
@@ -44,12 +53,14 @@ function requestConnection(passphrase: string, webSocket: WebSocket): void {
 function handleResponses(
 	messageEvent: MessageEvent,
 	peerConnection: RTCPeerConnection,
+	status: Writable<Status | undefined>,
 	webSocket: WebSocket
 ): void {
 	const message: SignalingMessage = JSON.parse(messageEvent.data);
 	switch (message.type) {
 		case 'offer':
 			handleOffer(peerConnection, message.sdp, webSocket);
+			status.set(statuses.signaling);
 			break;
 		case 'ice-candidate':
 			handleIceCandidate(message.candidate, peerConnection);
