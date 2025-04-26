@@ -1,3 +1,4 @@
+import { PUBLIC_TURN_ARRAY } from '$env/static/public';
 import type { Config } from './types';
 
 const config: Config = {
@@ -15,6 +16,7 @@ const config: Config = {
 		{
 			urls: 'stun:stun.cloudflare.com:53',
 		},
+		...JSON.parse(PUBLIC_TURN_ARRAY!),
 	],
 };
 
