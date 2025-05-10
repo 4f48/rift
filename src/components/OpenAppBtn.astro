@@ -1,0 +1,19 @@
+---
+import { ExternalLink, Sparkles, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const url = Astro.url.pathname;
+---
+
+{
+  url != "/app" && (
+    <div class="flex items-center gap-4">
+      <a href="/app">
+        <Button variant="secondary" size="sm">
+          Open Rift
+          <ExternalLink />
+        </Button>
+      </a>
+    </div>
+  )
+}

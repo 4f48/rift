@@ -1,0 +1,19 @@
+---
+import { Font } from "astro:assets";
+
+interface Props {
+  title?: string;
+}
+const { title = "Rift - Quick file transfer" } = Astro.props;
+---
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="generator" content={Astro.generator} />
+
+  <title>{title}</title>
+  <meta name="description" content="Quick file transfer." />
+
+  <Font cssVariable="--font-inter" />
+</head>

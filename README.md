@@ -1,41 +1,13 @@
-# sv
+Rift is a secure real-time file sending solution powered by WebRTC. It sends files through LAN connection whenever possible, making file transfers speedy. If LAN connection is not possible, Rift uses relays to bypass firewalls. A default relay is available, with a global monthly transfer limit of 500 MB. Maximum supported file size is 5 GB.
 
-Everything you need to build a Svelte project, powered by
-[`sv`](https://github.com/sveltejs/cli).
+## Rift Cloud\*
 
-## Creating a project
+With Rift, you will be easily able to deploy your own relay and signaling servers, and configure them to your liking. Rift Cloud also supports saving your preferences if you often send files.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Development progress
 
-```bash
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or
-`pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an
-> [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- [x] In-house signaling solution ([Flare](https://github.com/4f48/flare/pkgs/container/flare))
+- [ ] Working file transfers
+- [ ] Rift Cloud (save preferences, signaling/turn server renting)
+- [ ] Developer SDK
+- [ ] Documentation
