@@ -14,11 +14,11 @@ import {
   FormLabel,
 } from "@/components/ui/form";
 import { Progress } from "@/components/ui/progress";
-import { handleResponses, requestConnection } from "@/lib/receiver";
+import { sendIceCandidate } from "@/lib/common";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FLARE_URL } from "astro:env/client";
 import { Loader2 } from "lucide-react";
-import { useRef, useState, type JSX } from "react";
+import { useRef, useState, type JSX, type RefObject } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "./ui/button";
@@ -29,87 +29,41 @@ const schema = z.object({
 });
 
 export default function Receiver(): JSX.Element {
-  const socket = useRef<WebSocket | null>(null);
-  const peerConn = useRef<RTCPeerConnection | null>(null);
   const channel = useRef<RTCDataChannel | null>(null);
+  const rtc = useRef<RTCPeerConnection | null>(null);
+  const socket = useRef<WebSocket | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const [progress, setProgress] = useState(0);
+
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
       code: "",
     },
   });
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string | undefined>(undefined);
-  const [progress, setProgress] = useState(0);
+
   function onSubmit(values: z.infer<typeof schema>): void {
     setLoading(true);
+    setProgress(0);
     setStatus("Connecting...");
+
     socket.current = new WebSocket(FLARE_URL);
+
     socket.current.onopen = () => {
-      requestConnection(values.code, socket);
-      peerConn.current = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
-      });
-
-      // Set up ondatachannel to receive file
-      peerConn.current.ondatachannel = (event: RTCDataChannelEvent) => {
-        channel.current = event.channel;
-        setStatus("Receiving file...");
-        let receivedBuffers: Array<Uint8Array> = [];
-        let receivedBytes = 0;
-        let fileMeta: { name: string; size: number; type: string } | null =
-          null;
-
-        channel.current.binaryType = "arraybuffer";
-        channel.current.onmessage = (msgEvent: MessageEvent) => {
-          if (typeof msgEvent.data === "string") {
-            // End-of-file or meta message
-            try {
-              const meta = JSON.parse(msgEvent.data);
-              if (meta.done && meta.name && meta.size && meta.type) {
-                fileMeta = meta;
-                // Reconstruct file
-                if (fileMeta) {
-                  const blob = new Blob(receivedBuffers, {
-                    type: fileMeta.type,
-                  });
-                  // Offer download
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = fileMeta.name;
-                  document.body.appendChild(a);
-                  a.click();
-                  setStatus("Download ready");
-                  setLoading(false);
-                  setProgress(100);
-                  setTimeout(() => {
-                    URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                  }, 1000);
-                }
-              }
-            } catch (e) {
-              // Ignore non-meta string messages
-            }
-          } else if (msgEvent.data instanceof ArrayBuffer) {
-            const chunk = new Uint8Array(msgEvent.data);
-            receivedBuffers.push(chunk);
-            receivedBytes += chunk.length;
-            // Only update progress if fileMeta is set and has a valid size
-            if (
-              fileMeta !== null &&
-              typeof fileMeta.size === "number" &&
-              fileMeta.size > 0
-            ) {
-              setProgress(Math.floor((receivedBytes / fileMeta.size) * 100));
-            }
-          }
-        };
-      };
+      if (!socket.current)
+        throw Error("socket has to be set before starting signaling");
+      sendRequest(values.code, socket.current);
+      setStatus("Negotiating...");
     };
-    socket.current.onmessage = (event) =>
-      handleResponses(event, peerConn, socket);
+    socket.current.onmessage = (event) => {
+      if (!socket.current)
+        throw Error("socket has to be set before starting signaling");
+      handleMessage(event, rtc, socket.current, {
+        statusSetter: setStatus,
+      });
+    };
   }
   return (
     <Card>
@@ -160,4 +114,62 @@ export default function Receiver(): JSX.Element {
       )}
     </Card>
   );
+}
+
+function sendRequest(code: string, socket: WebSocket): void {
+  const msg: SignalingMessage = {
+    type: "connection-request",
+    passphrase: code,
+  };
+  socket.send(JSON.stringify(msg));
+}
+
+interface Setters {
+  statusSetter: React.Dispatch<React.SetStateAction<string | undefined>>;
+}
+async function handleMessage(
+  event: MessageEvent,
+  rtc: RefObject<RTCPeerConnection | null>,
+  socket: WebSocket,
+  setters: Setters,
+): Promise<void> {
+  const msg: SignalingMessage = JSON.parse(event.data);
+  switch (msg.type) {
+    case "offer":
+      rtc.current = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
+      });
+      rtc.current.setRemoteDescription(
+        new RTCSessionDescription({
+          type: "offer",
+          sdp: msg.sdp,
+        }),
+      );
+
+      rtc.current.ondatachannel = () => console.debug("data channel open");
+
+      const answer = await rtc.current.createAnswer();
+      rtc.current.setLocalDescription(answer);
+      rtc.current.onicecandidate = (event) => {
+        sendIceCandidate(event, socket);
+      };
+
+      if (!answer.sdp) throw Error("answer sdp is undefined");
+      const answerMsg: SignalingMessage = {
+        type: "answer",
+        sdp: answer.sdp,
+      };
+      socket.send(JSON.stringify(answerMsg));
+
+      setters.statusSetter("Connecting...");
+      break;
+    case "ice-candidate":
+      if (!rtc.current) throw Error("rtc peer connection is null");
+      const candidate: RTCIceCandidateInit | null = msg.candidate ? JSON.parse(msg.candidate) : null;
+      rtc.current.addIceCandidate(candidate);
+      break;
+    default:
+      throw Error("unhandled message: " + msg);
+      break;
+  }
 }

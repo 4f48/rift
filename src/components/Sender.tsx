@@ -10,11 +10,11 @@ import {
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { handleMessage, sendOffer } from "@/lib/sender";
+import { sendIceCandidate } from "@/lib/common";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DATA_CHANNEL, FLARE_URL } from "astro:env/client";
 import { Loader2 } from "lucide-react";
-import { useRef, useState, type JSX } from "react";
+import { useRef, useState, type JSX, type RefObject } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import CodeDialog from "./CodeDialog";
@@ -29,81 +29,48 @@ const schema = z.object({
 });
 
 export default function Sender(): JSX.Element {
-  const socket = useRef<WebSocket | null>(null);
-  const peerConn = useRef<RTCPeerConnection | null>(null);
   const channel = useRef<RTCDataChannel | null>(null);
+  const socket = useRef<WebSocket | null>(null);
+  const rtc = useRef<RTCPeerConnection | null>(null);
+
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(false);
   const [code, setCode] = useState<string | undefined>(undefined);
+
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
   });
+
   function onSubmit(values: z.infer<typeof schema>): void {
     setLoading(true);
+    setProgress(0);
     setStatus("Connecting...");
+
+    rtc.current = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
+    });
+    channel.current = rtc.current.createDataChannel(DATA_CHANNEL);
     socket.current = new WebSocket(FLARE_URL);
+
     socket.current.onopen = () => {
-      peerConn.current = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
+      if (!rtc.current || !socket.current)
+        throw Error("rtc and socket have to be set before starting signaling");
+      sendOffer(rtc, socket.current, {
+        passphraseLength: 6,
       });
-      channel.current = peerConn.current.createDataChannel(DATA_CHANNEL);
-
-      sendOffer(socket, peerConn);
-
-      setStatus("Waiting for code...");
-
-      // Wait for channel to open before sending file
-      channel.current.onopen = async () => {
-        setStatus("Transferring...");
-        const file = form.getValues("file");
-        if (!file) {
-          setStatus("No file selected.");
-          setLoading(false);
-          return;
-        }
-        const chunkSize = 64 * 1024; // 64KB
-        let offset = 0;
-        let sent = 0;
-        while (offset < file.size) {
-          const slice = file.slice(offset, offset + chunkSize);
-          const arrayBuffer = await slice.arrayBuffer();
-          channel.current?.send(arrayBuffer);
-          offset += chunkSize;
-          sent += arrayBuffer.byteLength;
-          setProgress(Math.floor((sent / file.size) * 100));
-        }
-        // Send end-of-file signal with file metadata
-        channel.current?.send(
-          JSON.stringify({
-            done: true,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-          }),
-        );
-        setStatus("Transfer complete!");
-        setLoading(false);
-      };
+      setStatus("Waiting for passphrase...");
     };
-    function codeSetter(code: string): void {
-      setCode(code);
-    }
-    function statusSetter(status: string): void {
-      setStatus(status);
-    }
-    if (socket.current) {
-      socket.current.onmessage = (event) =>
-        handleMessage(
-          event,
-          channel,
-          peerConn,
-          socket,
-          codeSetter,
-          statusSetter,
-          setCode,
-        );
-    }
+    socket.current.onmessage = (event) => {
+      if (!rtc.current || !socket.current)
+        throw Error("rtc and socket have to be set before starting signaling");
+      handleMessage(event, rtc, socket.current, {
+        codeSetter: setCode,
+        statusSetter: setStatus,
+      });
+    };
+
+    channel.current.onopen = () => console.debug("data channel open");
   }
   return (
     <>
@@ -158,4 +125,66 @@ export default function Sender(): JSX.Element {
       </Card>
     </>
   );
+}
+
+interface OfferConfig {
+  passphraseLength: number;
+}
+async function sendOffer(
+  rtc: RefObject<RTCPeerConnection | null>,
+  socket: WebSocket,
+  config: OfferConfig,
+): Promise<void> {
+  if (!rtc.current) throw Error("rtc peer connection is null");
+  const offer = await rtc.current.createOffer();
+
+  if (!offer.sdp) throw Error("offer sdp is undefined: " + offer);
+  rtc.current.setLocalDescription(offer);
+
+  const msg: SignalingMessage = {
+    type: "offer",
+    passphraseLength: config.passphraseLength,
+    sdp: offer.sdp,
+  };
+  socket.send(JSON.stringify(msg));
+}
+
+interface Setters {
+  codeSetter: React.Dispatch<React.SetStateAction<string | undefined>>;
+  statusSetter: React.Dispatch<React.SetStateAction<string | undefined>>;
+}
+async function handleMessage(
+  event: MessageEvent,
+  rtc: RefObject<RTCPeerConnection | null>,
+  socket: WebSocket,
+  setters: Setters,
+): Promise<void> {
+  if (!rtc.current) throw Error("rtc peer connection is null");
+
+  const msg: SignalingMessage = JSON.parse(event.data);
+  switch (msg.type) {
+    case "passphrase":
+      setters.codeSetter(msg.passphrase);
+      setters.statusSetter("Waiting for receiver...");
+      break;
+    case "answer":
+      setters.codeSetter(undefined);
+      setters.statusSetter("Connecting...");
+
+      rtc.current.setRemoteDescription(
+        new RTCSessionDescription({
+          type: "answer",
+          sdp: msg.sdp,
+        }),
+      );
+      rtc.current.onicecandidate = (event) => sendIceCandidate(event, socket);
+      break;
+    case "ice-candidate":
+      const candidate: RTCIceCandidateInit | null = msg.candidate ? JSON.parse(msg.candidate) : null;
+      rtc.current.addIceCandidate(candidate);
+      break;
+    default:
+      throw Error("unhandled message: " + msg);
+      break;
+  }
 }

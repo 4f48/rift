@@ -16,7 +16,7 @@ declare interface AnswerMessage {
 
 declare interface IceCandidateMessage {
   type: "ice-candidate";
-  candidate: string;
+  candidate?: string;
 }
 
 declare interface ConnectionRequestMessage {
