@@ -7,7 +7,7 @@ With Rift, you will be easily able to deploy your own relay and signaling server
 ## Development progress
 
 - [x] In-house signaling solution ([Flare](https://github.com/4f48/flare/pkgs/container/flare))
-- [ ] Working file transfers
+- [X] Working file transfers
 - [ ] Rift Cloud (save preferences, signaling/turn server renting)
 - [ ] Developer SDK
 - [ ] Documentation

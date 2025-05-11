@@ -30,3 +30,8 @@ declare type SignalingMessage =
   | AnswerMessage
   | IceCandidateMessage
   | ConnectionRequestMessage;
+
+declare interface FileMessage {
+  fileName: string;
+  file: ArrayBuffer;
+}

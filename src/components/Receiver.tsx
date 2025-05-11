@@ -62,6 +62,7 @@ export default function Receiver(): JSX.Element {
         throw Error("socket has to be set before starting signaling");
       handleMessage(event, rtc, socket.current, {
         statusSetter: setStatus,
+        loadingSetter: setLoading
       });
     };
   }
@@ -126,6 +127,7 @@ function sendRequest(code: string, socket: WebSocket): void {
 
 interface Setters {
   statusSetter: React.Dispatch<React.SetStateAction<string | undefined>>;
+  loadingSetter: React.Dispatch<React.SetStateAction<boolean>>;
 }
 async function handleMessage(
   event: MessageEvent,
@@ -146,7 +148,7 @@ async function handleMessage(
         }),
       );
 
-      rtc.current.ondatachannel = () => console.debug("data channel open");
+      rtc.current.ondatachannel = (event) => handleDataChannel(event, setters);
 
       const answer = await rtc.current.createAnswer();
       rtc.current.setLocalDescription(answer);
@@ -165,11 +167,41 @@ async function handleMessage(
       break;
     case "ice-candidate":
       if (!rtc.current) throw Error("rtc peer connection is null");
-      const candidate: RTCIceCandidateInit | null = msg.candidate ? JSON.parse(msg.candidate) : null;
+      const candidate: RTCIceCandidateInit | null = msg.candidate
+        ? JSON.parse(msg.candidate)
+        : null;
       rtc.current.addIceCandidate(candidate);
       break;
     default:
       throw Error("unhandled message: " + msg);
       break;
   }
+}
+
+function handleDataChannel(event: RTCDataChannelEvent, setters: Setters): void {
+  const channel = event.channel;
+  channel.binaryType = "arraybuffer";
+
+  let fileName: string | undefined;
+  channel.onmessage = (event) => {
+    if (!fileName) {
+      fileName = event.data;
+      channel.send("ready");
+    } else {
+      const buffer: ArrayBuffer = event.data;
+      const blob = new Blob([buffer]);
+
+      const a = document.createElement("a");
+      a.download = fileName;
+      a.href = URL.createObjectURL(blob);
+      a.onclick = (e) =>
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 30 * 1000);
+      a.click();
+      setters.loadingSetter(false);
+      setters.statusSetter(undefined);
+    }
+  };
 }

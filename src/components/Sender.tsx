@@ -70,7 +70,13 @@ export default function Sender(): JSX.Element {
       });
     };
 
-    channel.current.onopen = () => console.debug("data channel open");
+    channel.current.onopen = () => {
+      if (!channel.current) throw Error("data channel is null");
+      channel.current.binaryType = "arraybuffer";
+      sendFile(values.file, channel.current);
+      setLoading(false);
+      setStatus(undefined);
+    };
   }
   return (
     <>
@@ -180,11 +186,20 @@ async function handleMessage(
       rtc.current.onicecandidate = (event) => sendIceCandidate(event, socket);
       break;
     case "ice-candidate":
-      const candidate: RTCIceCandidateInit | null = msg.candidate ? JSON.parse(msg.candidate) : null;
+      const candidate: RTCIceCandidateInit | null = msg.candidate
+        ? JSON.parse(msg.candidate)
+        : null;
       rtc.current.addIceCandidate(candidate);
       break;
     default:
       throw Error("unhandled message: " + msg);
       break;
   }
+}
+
+function sendFile(file: File, channel: RTCDataChannel): void {
+  channel.send(file.name);
+  channel.onmessage = async (event) => {
+    if (event.data === "ready") channel.send(await file.arrayBuffer());
+  };
 }
